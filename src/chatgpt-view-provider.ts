@@ -7,7 +7,6 @@ export default class ChatGptViewProvider implements vscode.WebviewViewProvider {
     private webView?: vscode.WebviewView;
     private openAiApi?: OpenAI;
     private apiKey?: string;
-    private message?: any;
     private messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
 
     constructor(private context: vscode.ExtensionContext) { }
@@ -33,11 +32,6 @@ export default class ChatGptViewProvider implements vscode.WebviewViewProvider {
                 this.messages = [];
             }
         });
-
-        if (this.message !== null) {
-            this.sendMessageToWebView(this.message);
-            this.message = null;
-        }
     }
 
     public async ensureApiKey() {
@@ -78,7 +72,6 @@ export default class ChatGptViewProvider implements vscode.WebviewViewProvider {
 
         this.userSentQuestion(question);
         try {
-            let currentMessageNumber = this.message;
             let completion;
             try {
                 console.log(this.messages);
@@ -88,10 +81,6 @@ export default class ChatGptViewProvider implements vscode.WebviewViewProvider {
                 });
             } catch (error: any) {
                 await vscode.window.showErrorMessage("Error sending request to ChatGPT", error);
-                return;
-            }
-
-            if (this.message !== currentMessageNumber) {
                 return;
             }
 
@@ -123,11 +112,7 @@ export default class ChatGptViewProvider implements vscode.WebviewViewProvider {
     }
 
     private sendMessageToWebView(message: any) {
-        if (this.webView) {
-            this.webView?.webview.postMessage(message);
-        } else {
-            this.message = message;
-        }
+        this.webView?.webview.postMessage(message);
     }
 
     private getHtml(webview: vscode.Webview) {
