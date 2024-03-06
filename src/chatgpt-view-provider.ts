@@ -1,14 +1,14 @@
 // From https://github.com/barnesoir/chatgpt-vscode-plugin
 
-import OpenAI from "openai";
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import { BaseMessage, ChatMessage } from '@langchain/core/messages';
 
 export default class ChatGptViewProvider implements vscode.WebviewViewProvider {
     private webView?: vscode.WebviewView;
     private chain?: any;
-    private apiKey?: string;
-    private messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+    private openAIAPIKey?: string;
+    private messages: BaseMessage[] = [];
 
     constructor(private context: vscode.ExtensionContext) { }
 
@@ -35,21 +35,21 @@ export default class ChatGptViewProvider implements vscode.WebviewViewProvider {
         });
     }
 
-    public async ensureApiKey() {
-        this.apiKey = await this.context.globalState.get('chatgpt-api-key') as string;
+    public async ensureopenAIAPIKey() {
+        this.openAIAPIKey = await this.context.globalState.get('chatgpt-api-key') as string;
 
-        if (!this.apiKey) {
-            const apiKeyInput = await vscode.window.showInputBox({
+        if (!this.openAIAPIKey) {
+            const openAIAPIKeyInput = await vscode.window.showInputBox({
                 prompt: "Please enter your OpenAI API Key, can be located at https://openai.com/account/api-keys",
                 ignoreFocusOut: true,
             });
-            this.apiKey = apiKeyInput!;
-            this.context.globalState.update('chatgpt-api-key', this.apiKey);
+            this.openAIAPIKey = openAIAPIKeyInput!;
+            this.context.globalState.update('chatgpt-api-key', this.openAIAPIKey);
         }
     }
 
     public async askLLM(prompt: string, code?: string){
-        await this.ensureApiKey();
+        await this.ensureopenAIAPIKey();
 
         if(!this.chain){
             try{
@@ -67,7 +67,7 @@ export default class ChatGptViewProvider implements vscode.WebviewViewProvider {
                     return;
                 }
 
-                process.env["OPENAI_API_KEY"] = this.apiKey;
+                process.env["OPENAI_API_KEY"] = this.openAIAPIKey;
                 const module = await import(mjs_file_url);
                 this.chain = module.chain;
             }
@@ -90,7 +90,7 @@ export default class ChatGptViewProvider implements vscode.WebviewViewProvider {
         this.userSentQuestion(question);
         try{
             let response: string = await this.chain.invoke({
-                input: question
+                messages: this.messages
             });
             this.botSentResponse(response);
         }
@@ -101,12 +101,12 @@ export default class ChatGptViewProvider implements vscode.WebviewViewProvider {
 
     private botSentResponse(response: string){
         this.sendMessageToWebView({ type: 'addResponse', value: response });
-        this.messages.push({role: "assistant", content: response});
+        this.messages.push(new ChatMessage(response, "assistant"));
     }
 
     private userSentQuestion(message: string){
         this.sendMessageToWebView({ type: 'addQuestion', value: message, code: null });
-        this.messages.push({role: "user", content: message});
+        this.messages.push(new ChatMessage(message, "user"));
     }
 
     private sendMessageToWebView(message: any) {
