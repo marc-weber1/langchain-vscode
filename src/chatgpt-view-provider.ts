@@ -3,8 +3,6 @@
 import OpenAI from "openai";
 import * as vscode from 'vscode';
 import * as fs from 'fs';
-import * as path from 'path';
-import * as url from 'url';
 
 export default class ChatGptViewProvider implements vscode.WebviewViewProvider {
     private webView?: vscode.WebviewView;
