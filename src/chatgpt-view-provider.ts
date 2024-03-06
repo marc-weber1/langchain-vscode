@@ -3,6 +3,8 @@
 import OpenAI from "openai";
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import * as path from 'path';
+import * as url from 'url';
 
 export default class ChatGptViewProvider implements vscode.WebviewViewProvider {
     private webView?: vscode.WebviewView;
@@ -45,7 +47,6 @@ export default class ChatGptViewProvider implements vscode.WebviewViewProvider {
             });
             this.apiKey = apiKeyInput!;
             this.context.globalState.update('chatgpt-api-key', this.apiKey);
-            process.env.OPENAI_API_KEY = this.apiKey;
         }
     }
 
@@ -59,11 +60,18 @@ export default class ChatGptViewProvider implements vscode.WebviewViewProvider {
                     await vscode.window.showErrorMessage("A workspace folder must be opened to use langchain.");
                     return;
                 }
-                let workspace_path = vscode.workspace.workspaceFolders[0].uri.path;
-                if(fs.existsSync(workspace_path + "langchain.mjs")){
-                    const module = await import(workspace_path + "langchain.mjs");
-                    this.chain = module.chain;
+                // No idea why we need to do this much; will this even work on drives with other letters?
+                let workspace_path = vscode.workspace.workspaceFolders[0].uri.path.replace(/[a-zA-Z]:/, '').replace(/[\\/]+/g, '/');
+
+                let mjs_file_url = workspace_path + "/.llm-helper/langchain.mjs";
+                if(!fs.existsSync(mjs_file_url)){
+                    await vscode.window.showErrorMessage("No default chain configured yet.");
+                    return;
                 }
+
+                process.env["OPENAI_API_KEY"] = this.apiKey;
+                const module = await import(mjs_file_url);
+                this.chain = module.chain;
             }
             catch(error: any){
                 await vscode.window.showErrorMessage("Unexpected error loading chain: ", error?.message);
@@ -85,7 +93,7 @@ export default class ChatGptViewProvider implements vscode.WebviewViewProvider {
         try{
             let response: string = await this.chain.invoke({
                 input: question
-            })?.content;
+            });
             this.botSentResponse(response);
         }
         catch(error: any){
