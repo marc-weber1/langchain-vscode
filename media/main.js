@@ -54,7 +54,7 @@
         const input = document.getElementById("question-input");
         if (input.value?.length > 0) {
             vscode.postMessage({
-                type: "askChatGPT",
+                type: "askLLM",
                 value: input.value,
             });
 

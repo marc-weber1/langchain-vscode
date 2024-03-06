@@ -2,10 +2,11 @@
 
 import OpenAI from "openai";
 import * as vscode from 'vscode';
+import * as fs from 'fs';
 
 export default class ChatGptViewProvider implements vscode.WebviewViewProvider {
     private webView?: vscode.WebviewView;
-    private openAiApi?: OpenAI;
+    private chain?: any;
     private apiKey?: string;
     private messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
 
@@ -25,8 +26,8 @@ export default class ChatGptViewProvider implements vscode.WebviewViewProvider {
         webviewView.webview.html = this.getHtml(webviewView.webview);
 
         webviewView.webview.onDidReceiveMessage(data => {
-            if (data.type === 'askChatGPT') {
-                this.sendOpenAiApiRequest(data.value);
+            if (data.type === 'askLLM') {
+                this.askLLM(data.value);
             }
             else if(data.type == 'clearChat'){
                 this.messages = [];
@@ -44,17 +45,28 @@ export default class ChatGptViewProvider implements vscode.WebviewViewProvider {
             });
             this.apiKey = apiKeyInput!;
             this.context.globalState.update('chatgpt-api-key', this.apiKey);
+            process.env.OPENAI_API_KEY = this.apiKey;
         }
     }
 
-    public async sendOpenAiApiRequest(prompt: string, code?: string) {
+    public async askLLM(prompt: string, code?: string){
         await this.ensureApiKey();
 
-        if (!this.openAiApi) {
-            try {
-                this.openAiApi = new OpenAI({apiKey: this.apiKey});
-            } catch (error: any) {
-                vscode.window.showErrorMessage("Failed to connect to ChatGPT", error?.message);
+        if(!this.chain){
+            try{
+                // Try to load any valid langchain file in .llm-helper folder
+                if(vscode.workspace.workspaceFolders == undefined){
+                    await vscode.window.showErrorMessage("A workspace folder must be opened to use langchain.");
+                    return;
+                }
+                let workspace_path = vscode.workspace.workspaceFolders[0].uri.path;
+                if(fs.existsSync(workspace_path + "langchain.mjs")){
+                    const module = await import(workspace_path + "langchain.mjs");
+                    this.chain = module.chain;
+                }
+            }
+            catch(error: any){
+                await vscode.window.showErrorMessage("Unexpected error loading chain: ", error?.message);
                 return;
             }
         }
@@ -64,40 +76,20 @@ export default class ChatGptViewProvider implements vscode.WebviewViewProvider {
 
         if (!this.webView) {
             await vscode.commands.executeCommand('chatgpt-vscode-plugin.view.focus');
-        } else {
+        }
+        else {
             this.webView?.show?.(true);
         }
 
-        let response: string = '';
-
         this.userSentQuestion(question);
-        try {
-            let completion;
-            try {
-                console.log(this.messages);
-                completion = await this.openAiApi.chat.completions.create({
-                    model: "gpt-3.5-turbo",
-                    messages: this.messages
-                });
-            } catch (error: any) {
-                await vscode.window.showErrorMessage("Error sending request to ChatGPT", error);
-                return;
-            }
-
-            response = completion?.choices[0].message.content || '';
-
-            /*const REGEX_CODEBLOCK = new RegExp('\`\`\`', 'g');
-            const matches = response.match(REGEX_CODEBLOCK);
-            const count = matches ? matches.length : 0;
-            if (count % 2 !== 0) {
-                response += '\n\`\`\`';
-            }*/
-
+        try{
+            let response: string = await this.chain.invoke({
+                input: question
+            })?.content;
             this.botSentResponse(response);
-            
-        } catch (error: any) {
-            await vscode.window.showErrorMessage("Error sending request to ChatGPT", error);
-            return;
+        }
+        catch(error: any){
+            await vscode.window.showErrorMessage("Unexpected error running chain: ", error?.message);
         }
     }
 

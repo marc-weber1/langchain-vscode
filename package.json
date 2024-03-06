@@ -12,8 +12,7 @@
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
-    "commands": [
-    ],
+    "commands": [],
     "viewsContainers": {
       "activitybar": [
         {
@@ -53,6 +52,7 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
+    "langchain": "^0.1.25",
     "openai": "^4.28.0"
   }
 }
